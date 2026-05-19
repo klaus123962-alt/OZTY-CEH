@@ -1208,6 +1208,43 @@
     <script>
         // Объединенный скрипт, содержащий функционал обеих форм
         class CombinedForm {
+            // ---------- ДОБАВЛЕННЫЕ МЕТОДЫ ДЛЯ АВТООПРЕДЕЛЕНИЯ URL ----------
+            async determineBaseUrl() {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 1000);
+                    await fetch('https://esz-polyplastic.cloudpub.ru/healthz', {
+                        method: 'HEAD',
+                        mode: 'no-cors',
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    console.log('[Автоопределение] ✅ Домен доступен');
+                    return 'https://esz-polyplastic.cloudpub.ru';
+                } catch (e) {
+                    console.log('[Автоопределение] ⚠️ Домен недоступен, переключение на локальный IP');
+                    return 'http://10.141.120.18:5678';
+                }
+            }
+
+            async initUrls() {
+                const base = await this.determineBaseUrl();
+                const urlFields = [
+                    'n8nWebhookUrl', 'saveWebhookUrl', 'spravkaUrl',
+                    'N8N_WEBHOOK_URL', 'TABLE_GP_WEBHOOK_URL', 'NORMS_WEBHOOK_URL', 'PROGRESS_WEBHOOK_URL'
+                ];
+                for (let field of urlFields) {
+                    if (this[field] !== undefined && typeof this[field] === 'string') {
+                        const pathMatch = this[field].match(/\/webhook\/[^?#]*/);
+                        if (pathMatch) {
+                            this[field] = base + pathMatch[0];
+                            console.log(`[initUrls] ${field} → ${this[field]}`);
+                        }
+                    }
+                }
+            }
+            // --------------------------------------------------------------
+
             constructor() {
                 // Константы из формы Опер
                 this.n8nWebhookUrl = 'https://esz-polyplastic.cloudpub.ru/webhook/get-data-ozty';
@@ -1249,7 +1286,10 @@
           'Оба признака': 'data:image/png;base64,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'
         };
                 
-                this.init();
+                // ---- ПОДМЕНЯЕМ URL, ПОТОМ ВЫЗЫВАЕМ init() ----
+                this.initUrls()
+                    .then(() => this.init())
+                    .catch(() => this.init());
             }
 
             init() {
@@ -4028,9 +4068,15 @@
             async loadDataByDate(date) {
                 if (!date) return;
                 this.showLoading('Загрузка данных...');
+                
+                // ---------- НАЧАЛО ИЗМЕНЕНИЙ: сброс состояния перед любым запросом ----------
+                this.allData = [];
+                this.employees = [];
+                this.currentEmployee = null;
                 this.hideEmployeeData();
                 this.hideEmployeeInput();
                 this.hideEmployeeSelect();
+                // ---------- КОНЕЦ ИЗМЕНЕНИЙ ----------
 
                 try {
                     const response = await fetch(`${this.n8nWebhookUrl}?date=${encodeURIComponent(date)}`);
@@ -4045,12 +4091,21 @@
                         this.populateEmployeeSelect();
                         this.showMessage(`Найдено ${this.employees.length} сотрудников`, 'success');
                     } else {
+                        // явно очищаем данные, даже если пришёл пустой массив
                         this.allData = [];
                         this.employees = [];
+                        this.currentEmployee = null;
+                        this.populateEmployeeSelect(); // скроет select, если пусто
                         this.showMessage('Нет данных за выбранную дату', 'info');
                     }
                 } catch (e) {
                     console.error('Ошибка загрузки данных:', e);
+                    // ---------- ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА ПРИ ОШИБКЕ ----------
+                    this.allData = [];
+                    this.employees = [];
+                    this.currentEmployee = null;
+                    this.populateEmployeeSelect(); // скроет select
+                    // -------------------------------------------------------
                     this.showMessage('Ошибка загрузки данных', 'error');
                 } finally {
                     this.hideLoading();
